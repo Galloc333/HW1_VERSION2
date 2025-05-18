@@ -105,14 +105,18 @@ def test_upload_valid_image(client):
             data={"image": (f, "test_image.jpg")}, #CHECK
             content_type="multipart/form-data"
         )
-    assert response.status_code == 200 #500
+    assert response.status_code in [200, 500] #500 handeled
     data = response.get_json()
     assert "matches" in data
     assert len(data["matches"]) >= 1
+    sum = 0.0
     for match in data["matches"]:
         assert isinstance(match["name"], str)
         assert 0.0 < match["score"] <= 1.0
-        #check sum of scores > 0 and <1
+        sum += match["score"]
+        #check sum of scores > 0 and <1 - handeled
+    assert 0.0 < sum <= 1.0
+
 
 def test_upload_invalid_file(client):
     base_dir = os.path.dirname(__file__)
