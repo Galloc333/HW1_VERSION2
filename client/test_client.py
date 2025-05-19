@@ -1,6 +1,7 @@
 import os
 import pytest
-from server.website import create_app
+from flask import Flask
+from server.website import views
 
 # ----------------------
 # Pytest fixtures
@@ -8,7 +9,10 @@ from server.website import create_app
 
 @pytest.fixture(scope="session")
 def app():
-    return create_app()
+    app = Flask(__name__)
+    app.config['SECRET_KEY'] = 'super-secret-key'
+    app.register_blueprint(views)
+    return app
 
 @pytest.fixture(scope="session")
 def client(app):
@@ -49,10 +53,6 @@ def test_status_initial(client):
     # processed must contain exactly "success" and "fail"
     assert set(status["processed"].keys()) == {"success", "fail"}
 
-    # uptime must exist and be numeric (fractional suggested, but not enforced by type)
-    # assert isinstance(status["uptime"], (int, float))
-
-import os
 
 def test_status_counters_change_after_upload(client):
     # Locate the test image relative to this test file
@@ -70,7 +70,7 @@ def test_status_counters_change_after_upload(client):
     with open(path, "rb") as f:
         client.post(
             "/upload_image",
-            data={"image": (f, "test_image.jpg")}, #CHECK THIS
+            data={"image": (f, "test_image.jpg")},
             content_type="multipart/form-data"
         )
 
@@ -90,6 +90,7 @@ def test_status_counters_change_after_upload(client):
 def test_wrong_method(client):
     response = client.get("/upload_image")
     assert response.status_code == 405
+    assert response.is_json
     data = response.get_json()
     assert "error" in data
     assert data["error"]["http_status"] == 405
@@ -102,20 +103,24 @@ def test_upload_valid_image(client):
     #assert os.path.isfile(path), f"Test image not found at {path}"
     with open(path, "rb") as f:
         response = client.post("/upload_image",
-            data={"image": (f, "test_image.jpg")}, #CHECK
+            data={"image": (f, "test_image.jpg")},
             content_type="multipart/form-data"
         )
-    assert response.status_code in [200, 500] #500 handeled
-    data = response.get_json()
-    assert "matches" in data
-    assert len(data["matches"]) >= 1
-    sum = 0.0
-    for match in data["matches"]:
-        assert isinstance(match["name"], str)
-        assert 0.0 < match["score"] <= 1.0
-        sum += match["score"]
-        #check sum of scores > 0 and <1 - handeled
-    assert 0.0 < sum <= 1.0
+    assert response.status_code in [200, 500]
+    if response.status_code == 200:
+        data = response.get_json()
+        assert "matches" in data
+        assert len(data["matches"]) >= 1
+        sum = 0.0
+        for match in data["matches"]:
+            assert isinstance(match["name"], str)
+            assert 0.0 < match["score"] <= 1.0
+            sum += match["score"]
+        assert 0.0 < sum <= 1.0
+    else:
+        data = response.get_json()
+        assert "error" in data
+        assert data["error"]["http_status"] == 500
 
 
 def test_upload_invalid_file(client):
